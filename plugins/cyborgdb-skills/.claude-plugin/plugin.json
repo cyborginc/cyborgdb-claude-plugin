@@ -1,0 +1,9 @@
+{
+  "name": "cyborgdb-skills",
+  "version": "0.10.6",
+  "description": "Skills for setting up cyborgdb-core, cyborgdb-service, and the Python/JS/Go SDKs",
+  "author": {
+    "name": "Cyborg Team",
+    "email": "ahelle@cyborg.co"
+  }
+}
