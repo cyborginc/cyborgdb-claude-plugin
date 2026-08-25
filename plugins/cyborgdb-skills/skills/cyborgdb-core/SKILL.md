@@ -1,32 +1,22 @@
 ---
 name: cyborgdb-core
-description: Help the user set up cyborgdb-core (the embedded, in-process CyborgDB engine) in their own project, matched to the version they're actually on. Detects the installed cyborgdb-core version, points at the matching v0.X.x docs on docs.cyborg.co, and scaffolds a minimal working integration following that version's quickstart. Use when the user wants to use cyborgdb-core, integrate it into their Python or C++ code, evaluate it locally, or fix code that already uses it. Triggers like "set up cyborgdb-core", "use cyborgdb-core", "cyborgdb-core quickstart", "embedded cyborgdb", "add cyborgdb-core to my app".
+description: Help the user set up cyborgdb-core (the embedded, in-process CyborgDB engine) in their own project, matched to the version they're actually on. Detects the installed cyborgdb-core version, points at the matching v0.X.x docs on docs.cyborg.co, and scaffolds a minimal working integration following that version's quickstart. Use when the user wants to use cyborgdb-core, integrate it into their Python code, evaluate it locally, or fix code that already uses it. Triggers like "set up cyborgdb-core", "use cyborgdb-core", "cyborgdb-core quickstart", "embedded cyborgdb", "add cyborgdb-core to my app".
 ---
 
 # cyborgdb-core — set it up in the user's project
 
 Help the user get a working `cyborgdb-core` integration in their code. **First detect which version of cyborgdb-core they're on** (or want to install), then follow the matching quickstart from `docs.cyborg.co/versions/v<MAJOR.MINOR>.x/...`. The inline code below targets **v0.17**; if the user is on an older version, fetch and follow that version's quickstart instead — APIs have shifted between minors.
 
-`cyborgdb-core` is **Python and C++ only**. For other languages, the user wants [[cyborgdb-sdks]] against a running [[cyborgdb-service]].
+`cyborgdb-core` is **Python only**. For other languages, the user wants [[cyborgdb-sdks]] against a running [[cyborgdb-service]].
 
 ## Step 0 — Detect the version (do this first)
 
 Try these in order until one resolves a version. Stop as soon as you have one.
 
-**Python:**
-
 ```bash
 pip show cyborgdb-core 2>/dev/null | awk '/^Version:/ {print $2}'
 # Or, if already imported in their code:
 python -c "import cyborgdb_core; print(cyborgdb_core.__version__)"
-```
-
-**C++ (Conan):**
-
-```bash
-grep -E 'cyborgdb[-_]core' conanfile.txt conanfile.py 2>/dev/null
-# Or check the lockfile:
-grep -A1 'cyborgdb_core' conan.lock 2>/dev/null
 ```
 
 If **nothing is installed yet**, resolve the latest from PyPI and proceed with that version — don't pause to ask, and don't hardcode a minor:
@@ -53,10 +43,8 @@ For any non-trivial code change, **fetch the matching quickstart page** and foll
 
 - The `index_key` is a 32-byte secret that encrypts the index. **Losing it means losing the data — there is no recovery.** Tell the user to store it in their secret manager; never hardcode a real key.
 - Without an API key, the client runs in free-tier mode (1M items/index cap on v0.17). For a real key, point them to https://cyborgdb.co.
-- C++ install requires a Conan token from Cyborg — surface this early so the user can request one before you proceed.
-- Default to **Python** unless the user is clearly in C++.
 
-## Steps (Python, v0.17 — default)
+## Steps (Python, v0.17)
 
 1. **Install** into the user's existing environment:
    ```bash
@@ -106,72 +94,6 @@ for r in results:
 got = index.get(["item_1", "item_2", "item_3"], index_key=index_key)
 for item in got:
     print(f"ID: {item['id']}, Vector: {item['vector']}, Contents: {item['contents']}")
-```
-
-## Steps (C++, v0.17)
-
-1. **Install** via Conan (replace `<token>` with the Cyborg-provided token):
-   ```bash
-   conan remote add cyborgdb https://dl.cloudsmith.io/<token>/cyborg/cyborgdb/conan
-   conan remote login cyborgdb -p <token> cyborg
-   conan install cyborgdb_core -r cyborgdb
-   ```
-2. **Scaffold** `quickstart.cpp` and wire it into the user's CMake / Conan project.
-3. **Build and run** to verify.
-
-```cpp
-// quickstart.cpp — cyborgdb-core v0.17 embedded quickstart
-#include "cyborgdb_core/client.hpp"
-#include "cyborgdb_core/encrypted_index.hpp"
-#include <array>
-#include <iostream>
-#include <stdexcept>
-#include <string>
-#include <vector>
-#include <openssl/rand.h>
-
-int main() {
-    cyborg::Client client(
-        /*api_key=*/"",
-        cyborg::StorageConfig::Disk("/tmp/cyborgdb"),
-        /*device_id=*/0,
-        cyborg::kNone);
-
-    std::array<uint8_t, 32> index_key;
-    if (RAND_bytes(index_key.data(), index_key.size()) != 1) {
-        throw std::runtime_error("Failed to generate secure random key");
-    }
-
-    auto index = client.CreateIndex("my_index", index_key);
-
-    std::vector<std::string> ids = {"item_1", "item_2", "item_3"};
-    cyborg::Array2D<float> vectors{
-        {0.1f, 0.2f, 0.3f, 0.4f},
-        {0.5f, 0.6f, 0.7f, 0.8f},
-        {0.9f, 0.10f, 0.11f, 0.12f},
-    };
-    std::vector<std::vector<uint8_t>> contents = {
-        {'H','e','l','l','o','!'},
-        {'B','o','n','j','o','u','r','!'},
-        {'H','o','l','a','!'},
-    };
-    index->Upsert(ids, vectors, contents, /*metadata=*/{}, index_key);
-
-    cyborg::Array2D<float> query_vectors{{0.1f, 0.2f, 0.3f, 0.4f}};
-    cyborg::QueryResults results = index->Query(query_vectors, cyborg::QueryParams{}, index_key);
-    auto view = results[0];
-    for (uint32_t i = 0; i < view.num_results; ++i) {
-        std::cout << "ID: " << view.ids[i] << ", Distance: " << view.distances[i] << "\n";
-    }
-
-    std::vector<cyborg::ItemFields> include = {cyborg::ItemFields::kContents};
-    std::vector<cyborg::Item> items = index->Get(ids, include, index_key);
-    for (const auto& item : items) {
-        std::cout << "ID: " << item.id
-                  << ", Contents: " << std::string(item.contents.begin(), item.contents.end())
-                  << "\n";
-    }
-}
 ```
 
 ## Verifying it works
