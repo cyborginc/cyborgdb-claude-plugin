@@ -15,26 +15,29 @@ That's it. The skills below activate automatically when your request matches —
 
 ## What you get
 
-The `cyborgdb-skills` plugin bundles three skills:
+The `cyborgdb-skills` plugin bundles four skills:
 
 | Skill | Use it when you want to… |
 |-------|--------------------------|
+| **cyborgdb-install** | Go from zero to a working first query, fully automated — no API key, no config, sample data included. |
 | **cyborgdb-core** | Embed the in-process CyborgDB engine directly in your Python app (no server). |
 | **cyborgdb-service** | Start and run the standalone CyborgDB HTTP server, then verify it's healthy. |
 | **cyborgdb-sdks** | Connect an app to a running `cyborgdb-service` from Python, JavaScript/TypeScript, or Go. |
 
-Each skill detects the version you're actually on, points at the matching `v0.X.x` docs on [docs.cyborg.co](https://docs.cyborg.co), and writes a minimal working integration following that version's quickstart.
+Each skill detects the version you're actually on, points at the matching docs on [docs.cyborg.co](https://docs.cyborg.co), and writes a minimal working integration following that version's quickstart.
 
 ## Example prompts
 
 Once installed, just ask Claude naturally:
 
+- "Install CyborgDB"
 - "Set up cyborgdb-core in my Python project"
 - "Start cyborgdb-service with Docker and check it's healthy"
 - "Connect my app to cyborgdb-service using the TypeScript SDK"
 
 ## Which one do I need?
 
+- **Just want it running with zero decisions** → `cyborgdb-install`
 - **In-process, Python only, no server** → `cyborgdb-core`
 - **Running a server** → `cyborgdb-service`, then `cyborgdb-sdks` to call it from your app
 - **Any language other than Python** → `cyborgdb-service` + `cyborgdb-sdks`
