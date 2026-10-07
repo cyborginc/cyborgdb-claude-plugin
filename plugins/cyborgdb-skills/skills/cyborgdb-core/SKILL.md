@@ -36,7 +36,7 @@ For any non-trivial code change, **fetch the matching quickstart page** and foll
 
 ## Version-specific gotchas
 
-- **v0.17 / v0.18:** `index_key` is supplied on every data op. Storage backends: `disk` (default), `memory`, `s3`. Free-tier cap is 1,000,000 items per index without an API key. Query `contents` live in separately encrypted item records — chain `get()` after `query()` to read them.
+- **v0.17 / v0.18:** `index_key` is supplied on every data op. Storage backends: `disk` (default) and `s3` — there is **no `StorageConfig.memory()`**; for memory-tier reads use the cache flags on disk, e.g. `StorageConfig.disk(path, cache_vectors=True, cache_metadata=True, cache_ids=True, cache_metadata_index=True)`. Free-tier cap is 1,000,000 items per index without an API key. Query `contents` live in separately encrypted item records — chain `get()` after `query()` to read them.
 - **v0.16 and earlier:** polymorphic index constructors (`IndexIVFFlat`, `IndexIVFPQ`, `IndexIVFSQ`) exist; in v0.17 they were collapsed into flat keyword arguments on `create_index`. The old storage backend names (`standalone`, `postgres`, `redis`, `CYBORGDB_CONNECTION_STRING`) also apply pre-v0.17. **If the user is on v0.16 or older, do not use the v0.18 code below verbatim — fetch their version's quickstart.**
 
 ## Before you scaffold
@@ -55,8 +55,10 @@ For any non-trivial code change, **fetch the matching quickstart page** and foll
    #   pip install cyborgdb-core[langchain]    # LangChain integration
    #   pip install cyborgdb-core[all]
    ```
-2. **Scaffold** a self-contained file (e.g. `quickstart.py`) using the snippet below. Use `StorageConfig.disk(...)` for default persistent storage; swap to `.memory()` for tests or `.s3("bucket")` for cloud.
+2. **Scaffold** a self-contained file (e.g. `quickstart.py`) using the snippet below. Use `StorageConfig.disk(...)` for default persistent storage; swap to `.s3("bucket")` for cloud. For tests, point `.disk(...)` at a temp dir — there is no in-memory backend.
 3. **Run it once** to verify the setup works against the user's installed version. See *Verifying it works* below.
+
+**Re-running either script fails** with `ValueError: Index name my_index already exists` (or `articles` for the snippet below — both share `/tmp/cyborgdb`) — the index persists on disk, and since the demo key was ephemeral, the old index is unrecoverable (`load_index` with a different key fails to unwrap the DEK). For a fresh start, delete the storage dir (`rm -rf /tmp/cyborgdb`). For real usage, save the key and reopen with `client.load_index(index_name, index_key)` instead of `create_index`.
 
 ```python
 # quickstart.py — cyborgdb-core v0.18 embedded quickstart
@@ -69,6 +71,7 @@ client = cyborgdb.Client(storage_config=cyborgdb.StorageConfig.disk("/tmp/cyborg
 # 32-byte key. LOSING THIS LOSES THE DATA — persist it in a secret manager.
 index_key = secrets.token_bytes(32)
 
+# dimension is optional here — it's inferred from the first upsert.
 index = client.create_index(index_name="my_index", index_key=index_key)
 
 # index_key is required on every data operation.
@@ -82,7 +85,7 @@ index.upsert(items, index_key=index_key)
 results = index.query(
     query_vectors=[0.1, 0.2, 0.3, 0.4],
     top_k=2,
-    include=["distance", "metadata"],
+    include=["distance"],  # add "metadata" when your items carry metadata
     index_key=index_key,
 )
 
@@ -129,21 +132,29 @@ index.upsert([
 
 # Pure BM25 (no vector) — ranks by text score:
 index.query_metadata(text="encrypted search", top_k=10, index_key=index_key)
-# [{"id": "a1", "score": 2.63}]
+# [{"id": "a1", "score": 2.67}]
+
+# query_metadata also works with filters alone (no text) — fetch by metadata, no vector needed:
+index.query_metadata(filters={"author": "bob"}, top_k=10, index_key=index_key)
+# [{"id": "a2"}]
 
 # Hybrid (BM25 + vector, fused by weighted RRF; results carry score, never distance):
 qv = rng.random(128, dtype=np.float32)
 index.query(query_vectors=qv, text="encrypted search", top_k=10, alpha=0.5, index_key=index_key)
 # alpha: 0 = pure BM25, 1 = pure vector (default 0.5)
 
-# Metadata filter (MongoDB-style operators), with or without text:
+# Metadata filter (MongoDB-style operators), with or without text.
+# Vector/filter query() returns bare IDs unless you pass include=[...] (hybrid always carries score):
 index.query(query_vectors=qv, filters={"author": {"$in": ["ann", "bob"]}},
-            top_k=10, index_key=index_key)
+            top_k=10, include=["distance", "metadata"], index_key=index_key)
+# [{"id": "a1", "distance": ..., "metadata": {...}}, {"id": "a2", ...}]
 index.query(query_vectors=qv, text="encrypted search", filters={"author": "ann"},
             top_k=10, index_key=index_key)   # filter resolves first; both legs rank its survivors
 ```
 
-Gotchas (same as the service SDK — see [[cyborgdb-sdks]] for the full list): `full_text` fields can't also be `filterable`/`pattern` (store the value twice under two names if needed); hybrid `query()` requires a query vector even at `alpha=0` (use `query_metadata` for text-only); `full_text` values must be single strings; field names and string values are case-sensitive in filters.
+A `metadata_schema` is only **required for BM25** (`full_text` fields must be declared at creation). Plain metadata filtering works without any schema — upsert `metadata` on a schemaless index and `filters=` just works.
+
+Gotchas (same as the service SDK — see [[cyborgdb-sdks]] for the full list): `full_text` fields can't also be `filterable`/`pattern` (store the value twice under two names if needed); hybrid `query()` requires `query_vectors` or `query_contents` even at `alpha=0` — the error names `query_contents`, the auto-embedding input from the `[embeddings]` extra (use `query_metadata` for text-only); `full_text` values must be single strings; field names and string values are case-sensitive in filters.
 
 Full guides: `https://docs.cyborg.co/versions/latest/embedded/guides/data-operations/{metadata-filtering,bm25-search}`
 
@@ -157,7 +168,8 @@ If you can't run it (sandboxed env, remote machine), say so explicitly — don't
 
 ## Pointers for follow-up questions
 
-- Storage backends: `StorageConfig.memory()`, `.disk(path)`, `.s3(bucket)`.
+- Storage backends: `StorageConfig.disk(path)` and `.s3(bucket)` only. No `.memory()` — for memory-tier warm reads set the four `cache_*` flags on `.disk(...)` to `True`.
+- Existing indexes: `client.list_indexes()` to enumerate, `client.load_index(name, index_key)` to reopen (needs the original key), `index.delete_index()` to remove one.
 - Filter operators: `$eq`, `$ne`, `$in`, `$nin`, `$gt`, `$gte`, `$lt`, `$lte`, `$and`, `$or`, `$not`, `$exists` (MongoDB-style subset; see the section above for upsert/query shapes).
 - Encryption model: an encrypted index does not auto-hide vectors from the key holder — the user must pass `index_key` on `get`/`query` to retrieve decrypted data, and anyone without the key gets nothing.
 - API key (lifts the 1M-item cap): https://cyborgdb.co — pass as first argument: `cyborgdb.Client(api_key, storage_config=...)`.
