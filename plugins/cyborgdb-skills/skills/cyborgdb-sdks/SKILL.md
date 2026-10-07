@@ -1,6 +1,6 @@
 ---
 name: cyborgdb-sdks
-description: Help the user set up a CyborgDB SDK (Python, JavaScript/TypeScript, or Go) in their project, matched to the version they're actually on. Detects the installed SDK version, points at the matching docs on docs.cyborg.co, and scaffolds a minimal working integration against a running cyborgdb-service — using the hosted sample dataset so the first query returns non-empty results. Use when the user wants to use the SDK in their code, connect an app to cyborgdb-service, or fix code that already uses the SDK. Triggers like "set up cyborgdb sdk", "use the cyborgdb client", "cyborgdb python/js/ts/go example", "connect my app to cyborgdb-service".
+description: Help the user set up a CyborgDB SDK (Python, JavaScript/TypeScript, or Go) in their project, matched to the version they're actually on. Detects the installed SDK version, points at the matching docs on docs.cyborg.co, and scaffolds a minimal working integration against a running cyborgdb-service — using the hosted sample dataset so the first query returns non-empty results. Also covers metadata filtering (MongoDB-style operators on encrypted metadata) and full-text/hybrid BM25 search. Use when the user wants to use the SDK in their code, connect an app to cyborgdb-service, or fix code that already uses the SDK. Triggers like "set up cyborgdb sdk", "use the cyborgdb client", "cyborgdb python/js/ts/go example", "connect my app to cyborgdb-service", "filter cyborgdb query by metadata", "cyborgdb full-text / hybrid / bm25 search".
 ---
 
 # cyborgdb-sdks — set the SDK up in the user's project
@@ -243,10 +243,157 @@ Don't claim the setup is done until the program has actually run and produced:
 
 If you can't run the user's code (sandboxed env, remote machine), say so explicitly rather than asserting success.
 
+## Metadata filtering
+
+Metadata is end-to-end encrypted like the vectors. Tag items at upsert, filter at query.
+
+**Python:**
+
+```python
+index.upsert([
+    {"id": "item_1", "vector": [0.1, 0.1, 0.1, 0.1], "metadata": {"category": "dog", "views": 42}},
+    {"id": "item_2", "vector": [0.2, 0.2, 0.2, 0.2], "metadata": {"category": "cat", "views": 7}},
+])
+
+results = index.query(
+    query_vectors=[0.5, 0.9, 0.2, 0.7],
+    top_k=10,
+    filters={"category": {"$in": ["dog", "cat"]}, "views": {"$gte": 10}},
+)
+```
+
+**JavaScript / TypeScript** (same filter objects, camelCase params; `query()` returns `{results: [...]}`):
+
+```ts
+await index.upsert({ items: [
+  { id: "item_1", vector: [0.1, 0.1, 0.1, 0.1], metadata: { category: "dog", views: 42 } },
+  { id: "item_2", vector: [0.2, 0.2, 0.2, 0.2], metadata: { category: "cat", views: 7 } },
+]});
+
+const response = await index.query({
+  queryVectors: [0.5, 0.9, 0.2, 0.7],
+  topK: 10,
+  filters: { category: { $in: ["dog", "cat"] }, views: { $gte: 10 } },
+});
+console.log(response.results);
+```
+
+**Go** (filters are `map[string]interface{}`; single-vector results land in `Results.ArrayOfQueryResultItem`):
+
+```go
+items := cyborgdb.VectorItems{
+    {Id: "item_1", Vector: []float32{0.1, 0.1, 0.1, 0.1},
+        Metadata: map[string]interface{}{"category": "dog", "views": 42}},
+    {Id: "item_2", Vector: []float32{0.2, 0.2, 0.2, 0.2},
+        Metadata: map[string]interface{}{"category": "cat", "views": 7}},
+}
+if err := index.Upsert(ctx, items); err != nil { log.Fatal(err) }
+
+resp, err := index.Query(ctx, cyborgdb.QueryParams{
+    QueryVector: []float32{0.5, 0.9, 0.2, 0.7},
+    TopK:        10,
+    Filters: map[string]interface{}{
+        "category": map[string]interface{}{"$in": []string{"dog", "cat"}},
+        "views":    map[string]interface{}{"$gte": 10},
+    },
+})
+if err != nil { log.Fatal(err) }
+for _, r := range *resp.Results.ArrayOfQueryResultItem {
+    fmt.Println(r.Id)
+}
+```
+
+Things to get right:
+
+- **Types:** boolean, string, list of strings, numbers (stored as fp64).
+- **Operators** (MongoDB-style subset): `$and`, `$or`, `$not`, `$exists`, `$eq`, `$ne`, `$in`, `$nin`, `$gt`, `$gte`, `$lt`, `$lte`.
+- **Case-sensitive:** field names and string values must match exactly between upsert and filter.
+- **Indexing:** every metadata field is encrypted-indexed by default, so filters are fast. Fields can be opted out via `metadata_schema` at index creation; filters on non-indexed fields still work but evaluate after decryption (slower) — same for `$regex`/`$contains` on fields not pattern-indexed.
+- The sample dataset's `example_filters` are curated, guaranteed-to-match examples — use them for demos instead of inventing filters.
+
+Full reference: `https://docs.cyborg.co/versions/latest/service/guides/data-operations/metadata-filtering`
+
+## Full-text & hybrid search (BM25, v0.18)
+
+BM25 runs over **designated metadata fields** (not `contents`), and the text index is encrypted like everything else. Enablement is by designation at creation — it cannot be added to an existing index:
+
+```python
+index = client.create_index(
+    index_name="articles",
+    index_key=index_key,
+    dimension=4,
+    text_fields=["title", "body"],   # marks each field full_text=True
+)
+# JS/TS: createIndex({..., textFields: ["title", "body"]})
+# Go:    CreateIndexParams{..., TextFields: []string{"title", "body"}}
+index.upsert([{
+    "id": "a1",
+    "vector": [0.1, 0.2, 0.3, 0.4],
+    "metadata": {"title": "Encrypted vector search", "body": "Searching encrypted embeddings.", "author": "ann"},
+}])
+```
+
+Three query paths, picked by which arguments you set:
+
+```python
+# 1. Pure text (no vector) — query_metadata, ranks by BM25 score:
+index.query_metadata(text="encrypted search", top_k=10)
+# [{"id": "a1", "score": 2.63}, ...]
+
+# 2. Hybrid (BM25 + vector) — query with text; rank fusion via weighted RRF:
+index.query(query_vectors=qv, text="encrypted search", top_k=10, alpha=0.5)
+# alpha: 0 = pure BM25, 1 = pure vector (default 0.5). Results carry `score`, never `distance`.
+
+# 3. Three-way — add filters; the filter resolves first, both legs rank its survivors:
+index.query(query_vectors=qv, text="encrypted search", filters={"author": "ann"}, top_k=10)
+```
+
+**JavaScript / TypeScript** — same three paths; note the return-shape split (`queryMetadata` returns a bare array, `query` returns `{results: [...]}`):
+
+```ts
+const pure = await index.queryMetadata({ text: "encrypted search", topK: 10 });
+// pure is the array itself: [{id: "a1", score: 2.63}, ...]
+
+const hybrid = await index.query({ queryVectors: qv, text: "encrypted search", topK: 10, alpha: 0.5 });
+const threeWay = await index.query({ queryVectors: qv, text: "encrypted search", filters: { author: "ann" }, topK: 10 });
+console.log(hybrid.results, threeWay.results);
+```
+
+**Go** — optional params use pointer helpers; read single-vector results via the union accessor:
+
+```go
+pure, err := index.QueryMetadata(ctx, cyborgdb.QueryMetadataParams{
+    Text: cyborgdb.String("encrypted search"),
+    TopK: 10,
+})
+// pure.Results rows: row.Id, row.GetScore()
+
+hybrid, err := index.Query(ctx, cyborgdb.QueryParams{
+    QueryVector: qv,
+    Text:        cyborgdb.String("encrypted search"),
+    TopK:        10,
+    Alpha:       cyborgdb.Float64(0.5),
+    // Three-way: add Filters: map[string]interface{}{"author": "ann"}
+})
+for _, r := range *hybrid.Results.ArrayOfQueryResultItem {
+    fmt.Println(r.Id, r.GetScore())   // hybrid rows carry score; r.HasDistance() is false
+}
+```
+
+Text-leg knobs: `text_fields` (search a subset of designated fields), `text_field_weights` (parallel weights), `require_all_terms` (AND instead of the default OR). Creation-time scoring constants: `bm25_k1` (default 1.2), `bm25_b` (default 0.75).
+
+Gotchas that produce errors or silent misses — check these before writing code:
+
+- `full_text: true` implies `filterable: false` and is incompatible with `pattern: true` — a field is analyzed for BM25 **or** exact-match indexed, never both. Need both? Store the value twice under two names.
+- A hybrid `query()` still **requires a query vector even at `alpha=0`** — for text-only search use `query_metadata`.
+- With `text` set, only filters the metadata index resolves exactly are accepted — `$regex` on a non-`pattern` field or predicates on non-`filterable` fields are rejected (HTTP 400), and `order_by` can't combine with `text`.
+- A `full_text` field's value must be a **single string** — numbers, booleans, and lists of strings are skipped for that item (upsert still succeeds). English-only analysis for now; no phrase queries or NOT/exclusion.
+- Multi-tenant: use index-per-tenant — BM25 corpus statistics are global per index, never scoped to a filter.
+
+Full guide (tuning table for `alpha`/`rrf_k`/`window_mult`, error reference): `https://docs.cyborg.co/versions/latest/service/guides/data-operations/bm25-search`
+
 ## Pointers for follow-up questions
 
-- **Metadata + filtering.** Add `metadata: {...}` on upsert, pass `filters` to `query` (operators: `$gt`, `$lt`, `$gte`, `$lte`, `$eq`, `$ne`). The sample dataset's `example_filters` are curated, guaranteed-to-match examples.
 - **Batched queries.** Pass a list of vectors instead of one; results come back nested (one list per query).
 - **Automatic embeddings.** Create the index with `embedding_model="all-MiniLM-L6-v2"` (any HuggingFace model), upsert `contents` only, query with `query_contents` instead of `query_vectors`. Requires the Docker service or `pip install cyborgdb-service[embeddings]`.
-- **Full-text / hybrid search (v0.18).** Index with `text_fields`, query with `text=...` for BM25 + vector fusion: `https://docs.cyborg.co/versions/latest/service/guides/data-operations/bm25-search`
-- **REST API directly** (no SDK): `POST /v1/indexes/create`, `POST /v1/vectors/upsert`, `POST /v1/vectors/query`, with `X-API-Key` header when auth is on. Reference: `https://docs.cyborg.co/versions/latest/service/rest-api/`
+- **REST API directly** (no SDK): `POST /v1/indexes/create`, `POST /v1/vectors/upsert`, `POST /v1/vectors/query`, `POST /v1/vectors/query_metadata`, with `X-API-Key` header when auth is on. Reference: `https://docs.cyborg.co/versions/latest/service/rest-api/`

@@ -1,6 +1,6 @@
 ---
 name: cyborgdb-core
-description: Help the user set up cyborgdb-core (the embedded, in-process CyborgDB engine) in their own project, matched to the version they're actually on. Detects the installed cyborgdb-core version, points at the matching docs on docs.cyborg.co, and scaffolds a minimal working integration following that version's quickstart — no server, no API key, local disk storage by default. Use when the user wants to use cyborgdb-core, integrate it into their Python code, evaluate it locally, or fix code that already uses it. Triggers like "set up cyborgdb-core", "use cyborgdb-core", "cyborgdb-core quickstart", "embedded cyborgdb", "add cyborgdb-core to my app".
+description: Help the user set up cyborgdb-core (the embedded, in-process CyborgDB engine) in their own project, matched to the version they're actually on. Detects the installed cyborgdb-core version, points at the matching docs on docs.cyborg.co, and scaffolds a minimal working integration following that version's quickstart — no server, no API key, local disk storage by default. Also covers embedded metadata filtering (MongoDB-style operators on encrypted metadata) and full-text/hybrid BM25 search. Use when the user wants to use cyborgdb-core, integrate it into their Python code, evaluate it locally, or fix code that already uses it. Triggers like "set up cyborgdb-core", "use cyborgdb-core", "cyborgdb-core quickstart", "embedded cyborgdb", "add cyborgdb-core to my app", "filter/bm25/hybrid search with cyborgdb-core".
 ---
 
 # cyborgdb-core — set it up in the user's project
@@ -94,6 +94,59 @@ for r in results:
     print(f"ID: {r['id']}  Distance: {r['distance']:.4f}  Contents: {contents}")
 ```
 
+## Metadata filtering & full-text search (embedded, v0.18)
+
+Both work embedded with the same shapes as the service SDK, plus `index_key` on every call. BM25 must be enabled at creation by designating `full_text` fields — it cannot be added to an existing index.
+
+```python
+import secrets
+import numpy as np
+import cyborgdb_core as cyborgdb
+
+client = cyborgdb.Client(storage_config=cyborgdb.StorageConfig.disk("/tmp/cyborgdb"))
+index_key = secrets.token_bytes(32)
+
+index = client.create_index(
+    "articles",
+    index_key,
+    dimension=128,
+    metadata_schema={
+        "title":  {"full_text": True},   # analyzed for BM25
+        "body":   {"full_text": True},   # (shorthand: text_fields=["title", "body"])
+        "author": {"filterable": True},  # ordinary exact-match filterable field
+    },
+)
+
+rng = np.random.default_rng(0)
+index.upsert([
+    {"id": "a1", "vector": rng.random(128, dtype=np.float32),
+     "metadata": {"title": "Encrypted vector search",
+                  "body": "Searching over encrypted embeddings.", "author": "ann"}},
+    {"id": "a2", "vector": rng.random(128, dtype=np.float32),
+     "metadata": {"title": "Index tuning",
+                  "body": "Choosing n_lists for recall.", "author": "bob"}},
+], index_key=index_key)
+
+# Pure BM25 (no vector) — ranks by text score:
+index.query_metadata(text="encrypted search", top_k=10, index_key=index_key)
+# [{"id": "a1", "score": 2.63}]
+
+# Hybrid (BM25 + vector, fused by weighted RRF; results carry score, never distance):
+qv = rng.random(128, dtype=np.float32)
+index.query(query_vectors=qv, text="encrypted search", top_k=10, alpha=0.5, index_key=index_key)
+# alpha: 0 = pure BM25, 1 = pure vector (default 0.5)
+
+# Metadata filter (MongoDB-style operators), with or without text:
+index.query(query_vectors=qv, filters={"author": {"$in": ["ann", "bob"]}},
+            top_k=10, index_key=index_key)
+index.query(query_vectors=qv, text="encrypted search", filters={"author": "ann"},
+            top_k=10, index_key=index_key)   # filter resolves first; both legs rank its survivors
+```
+
+Gotchas (same as the service SDK — see [[cyborgdb-sdks]] for the full list): `full_text` fields can't also be `filterable`/`pattern` (store the value twice under two names if needed); hybrid `query()` requires a query vector even at `alpha=0` (use `query_metadata` for text-only); `full_text` values must be single strings; field names and string values are case-sensitive in filters.
+
+Full guides: `https://docs.cyborg.co/versions/latest/embedded/guides/data-operations/{metadata-filtering,bm25-search}`
+
 ## Verifying it works
 
 Don't claim the setup is done until the program has actually run and printed:
@@ -105,6 +158,7 @@ If you can't run it (sandboxed env, remote machine), say so explicitly — don't
 ## Pointers for follow-up questions
 
 - Storage backends: `StorageConfig.memory()`, `.disk(path)`, `.s3(bucket)`.
+- Filter operators: `$eq`, `$ne`, `$in`, `$nin`, `$gt`, `$gte`, `$lt`, `$lte`, `$and`, `$or`, `$not`, `$exists` (MongoDB-style subset; see the section above for upsert/query shapes).
 - Encryption model: an encrypted index does not auto-hide vectors from the key holder — the user must pass `index_key` on `get`/`query` to retrieve decrypted data, and anyone without the key gets nothing.
 - API key (lifts the 1M-item cap): https://cyborgdb.co — pass as first argument: `cyborgdb.Client(api_key, storage_config=...)`.
 - LangChain integration: `cyborgdb_core.integrations.langchain.CyborgVectorStore` (`pip install cyborgdb-core[langchain]`).

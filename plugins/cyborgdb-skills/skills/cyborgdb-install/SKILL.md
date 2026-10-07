@@ -129,7 +129,7 @@ Do not tell the user CyborgDB is installed until all three hold, with output as 
 2. The script printed the dataset banner (name/count/dimension).
 3. The first query printed **at least one result row** — non-empty is the whole point.
 
-Then tell the user, concretely: what's running (image/package + version), where data lives (Docker volume `cyborgdb_data` or `~/.cyborgdb/data`), that no API key was needed (free tier, 1M items/index — a key from https://cyborgdb.co lifts the cap), and that the demo `index_key` was ephemeral — for real data they must generate and store one in a secret manager. Offer [[cyborgdb-sdks]] as the next step for integrating their own app, or [[cyborgdb-core]] if they'd rather embed in-process Python with no server.
+Then tell the user, concretely: what's running (image/package + version), where data lives (Docker volume `cyborgdb_data` or `~/.cyborgdb/data`), that no API key was needed (free tier, 1M items/index — a key from https://cyborgdb.co lifts the cap), and that the demo `index_key` was ephemeral — for real data they must generate and store one in a secret manager. Offer [[cyborgdb-sdks]] as the next step for integrating their own app — including metadata filtering (the filter demo above already ran one; the dataset's `example_filters` has more, covering equality, ranges, and lists) and full-text/hybrid BM25 search (needs `text_fields` designated at index creation — see the sdks skill). Or [[cyborgdb-core]] if they'd rather embed in-process Python with no server.
 
 ## Headless / CI mode
 
