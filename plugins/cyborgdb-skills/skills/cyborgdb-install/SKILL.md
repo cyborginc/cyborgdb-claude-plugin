@@ -98,6 +98,8 @@ python3 -m venv .cyborgdb-venv
 
 ```python
 # first_query.py — CyborgDB first query against the hosted sample dataset
+import time
+
 import cyborgdb
 
 client = cyborgdb.Client(base_url="http://localhost:8000")
@@ -112,8 +114,9 @@ print(f"dataset: {dataset.name}  count={dataset.count}  dim={dataset.dimension} 
 # data encrypted with a lost key is unrecoverable.
 index_key = client.generate_key(save=False)
 
+# Unique name so reruns never collide with an old index (whose save=False key is gone).
 index = client.create_index(
-    index_name="cyborgdb_quickstart",
+    index_name=f"cyborgdb_quickstart_{int(time.time())}",
     index_key=index_key,
     dimension=dataset.dimension,
     metric=dataset.metric,
@@ -162,4 +165,3 @@ The same flow runs unattended in a clean container — it's already non-interact
 - **Port 8000 in use** → `lsof -i :8000`; remap and carry the port through.
 - **`load_sample_dataset` download fails** → check egress; retry with `force_download=True` if a cached copy is corrupt (integrity is SHA-256-verified, so a bad cache is rejected automatically).
 - **Health never passes under Docker** → `docker logs cyborgdb` and surface the actual error; on macOS remember the service is only reachable via the mapped port, not `--network host`.
-- **`create_index` fails with "already exists" on a rerun** → a previous run left the `cyborgdb_quickstart` index behind, and its ephemeral key is gone. Use a fresh index name (e.g. suffix `_2`) — don't try to recover the old index.

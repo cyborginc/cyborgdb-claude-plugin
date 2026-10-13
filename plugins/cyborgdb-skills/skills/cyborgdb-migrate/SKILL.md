@@ -34,10 +34,10 @@ Supported sources: **Pinecone, Qdrant, Weaviate, ChromaDB, Milvus**.
 ## Step 2 — Install the tool
 
 ```bash
-pip install "cyborgdb-migrate[<source>]"   # pinecone | qdrant | weaviate | chromadb | milvus
+pip install "cyborgdb-migrate[<source>]>=0.18"   # pinecone | qdrant | weaviate | chromadb | milvus
 ```
 
-Prefer a venv if the environment isn't already one. `[all]` installs every source extra.
+Prefer a venv if the environment isn't already one. `[all]` installs every source extra. The `>=0.18` floor matters: it upgrades any pre-existing older install, and versions before 0.18 **silently ignore** `text_fields` and `metadata_schema` — the migration would succeed but land without the full-text/metadata settings, which can't be added to the index afterward.
 
 ## Step 3 — Write the TOML config
 
@@ -69,6 +69,7 @@ Decisions to make with the user before running (all are **fixed at index creatio
 - **Full-text search:** if they want BM25 over metadata fields, set `text_fields = ["title", "body"]` (optional `bm25_k1`, `bm25_b`).
 - **Metadata indexing policy:** optional `[destination.metadata_schema]` with per-field `{ filterable = ..., pattern = ..., full_text = ... }`; unlisted fields are filterable by default.
 - **Storage precision:** `storage_precision` defaults to `float32`. `float16` halves storage with small recall loss; TurboQuant tiers `tq12` / `tq8` / `tq6` / `tq4` compress further (`tq4` is ~8× smaller than `float32` at ~94% recall@100).
+- **Embedding model:** optional `embedding_model = "<HuggingFace model>"` if they want the index to auto-embed new content after migration (upsert `contents` / query with `query_contents`). The migrated vectors themselves come from the source unchanged — this only affects data added later, but like everything else here it can only be set now.
 - Dimension and distance metric are read from the source automatically — don't ask for them.
 
 **Migrating into an existing index** instead: set `create_index = false` and supply exactly one of `index_key` (hex), `key_file`, or `kms_name`. The tool validates that source and destination dimensions match and exits 1 if not.
