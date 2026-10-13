@@ -15,7 +15,7 @@ That's it. The skills below activate automatically when your request matches —
 
 ## What you get
 
-The `cyborgdb-skills` plugin bundles four skills:
+The `cyborgdb-skills` plugin bundles five skills:
 
 | Skill | Use it when you want to… |
 |-------|--------------------------|
@@ -23,6 +23,7 @@ The `cyborgdb-skills` plugin bundles four skills:
 | **cyborgdb-core** | Embed the in-process CyborgDB engine directly in your Python app (no server). |
 | **cyborgdb-service** | Start and run the standalone CyborgDB HTTP server, then verify it's healthy. |
 | **cyborgdb-sdks** | Connect an app to a running `cyborgdb-service` from Python, JavaScript/TypeScript, or Go. |
+| **cyborgdb-migrate** | Move your vectors from Pinecone, Qdrant, Weaviate, ChromaDB, or Milvus into CyborgDB, end to end. |
 
 Each skill detects the version you're actually on, points at the matching docs on [docs.cyborg.co](https://docs.cyborg.co), and writes a minimal working integration following that version's quickstart.
 
@@ -34,6 +35,7 @@ Once installed, just ask Claude naturally:
 - "Set up cyborgdb-core in my Python project"
 - "Start cyborgdb-service with Docker and check it's healthy"
 - "Connect my app to cyborgdb-service using the TypeScript SDK"
+- "Migrate my vector database to CyborgDB"
 
 ## Which one do I need?
 
@@ -41,6 +43,7 @@ Once installed, just ask Claude naturally:
 - **In-process, Python only, no server** → `cyborgdb-core`
 - **Running a server** → `cyborgdb-service`, then `cyborgdb-sdks` to call it from your app
 - **Any language other than Python** → `cyborgdb-service` + `cyborgdb-sdks`
+- **Already have vectors in Pinecone / Qdrant / Weaviate / ChromaDB / Milvus** → `cyborgdb-migrate`
 
 ## Links
 

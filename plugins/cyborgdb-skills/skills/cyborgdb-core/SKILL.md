@@ -50,10 +50,8 @@ For any non-trivial code change, **fetch the matching quickstart page** and foll
 1. **Install** into the user's existing environment:
    ```bash
    pip install cyborgdb-core
-   # Optional extras:
-   #   pip install cyborgdb-core[embeddings]   # automatic embedding generation
+   # Optional extra for LangChain integration:
    #   pip install cyborgdb-core[langchain]    # LangChain integration
-   #   pip install cyborgdb-core[all]
    ```
 2. **Scaffold** a self-contained file (e.g. `quickstart.py`) using the snippet below. Use `StorageConfig.disk(...)` for default persistent storage; swap to `.s3("bucket")` for cloud. For tests, point `.disk(...)` at a temp dir — there is no in-memory backend.
 3. **Run it once** to verify the setup works against the user's installed version. See *Verifying it works* below.
@@ -154,7 +152,7 @@ index.query(query_vectors=qv, text="encrypted search", filters={"author": "ann"}
 
 A `metadata_schema` is only **required for BM25** (`full_text` fields must be declared at creation). Plain metadata filtering works without any schema — upsert `metadata` on a schemaless index and `filters=` just works.
 
-Gotchas (same as the service SDK — see [[cyborgdb-sdks]] for the full list): `full_text` fields can't also be `filterable`/`pattern` (store the value twice under two names if needed); hybrid `query()` requires `query_vectors` or `query_contents` even at `alpha=0` — the error names `query_contents`, the auto-embedding input from the `[embeddings]` extra (use `query_metadata` for text-only); `full_text` values must be single strings; field names and string values are case-sensitive in filters.
+Gotchas (same as the service SDK — see [[cyborgdb-sdks]] for the full list): `full_text` fields can't also be `filterable`/`pattern` (store the value twice under two names if needed); hybrid `query()` requires `query_vectors` or `query_contents` even at `alpha=0` — the error names `query_contents`, the auto-embedding input (use `query_metadata` for text-only); `full_text` values must be single strings; field names and string values are case-sensitive in filters.
 
 Full guides: `https://docs.cyborg.co/versions/latest/embedded/guides/data-operations/{metadata-filtering,bm25-search}`
 

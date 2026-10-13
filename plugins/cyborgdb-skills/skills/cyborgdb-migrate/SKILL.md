@@ -11,7 +11,7 @@ Supported sources: **Pinecone, Qdrant, Weaviate, ChromaDB, Milvus**.
 
 ## Non-negotiable safety rules
 
-1. **Capture the encryption key.** When creating a new non-KMS index, the tool generates an encryption key and prints it once as `Generated encryption key (hex): …` (on stderr). **If this key is lost, the migrated data is unrecoverable.** Capture it from the output and tell the user to store it in a secrets manager immediately. Never commit it, never leave it only in a log file.
+1. **Capture the encryption key.** When creating a new non-KMS index, the tool generates an encryption key and prints it once as `Generated encryption key (hex): …` — on stderr only, never in the log file, and not at all under `--quiet`. **If this key is lost, the migrated data is unrecoverable.** Never pass `--quiet` on a key-generating run, capture the key from stderr before backgrounding anything, and save it to a mode-600 file under `~/.cyborgdb/keys/` as a local recovery copy (see Step 4) while telling the user to store it in a secrets manager as the durable home. Never commit it.
 2. **No secrets in the config file.** The TOML supports `${VAR_NAME}` expansion anywhere — reference API keys as environment variables (`api_key = "${PINECONE_API_KEY}"`), never paste raw keys into the file. Write the config to a path outside any git repo (or confirm it's gitignored).
 3. **Never guess credentials.** If a source API key or host isn't available in the environment, ask the user for it (or where it lives) — don't invent values or probe speculatively.
 
@@ -79,9 +79,33 @@ Decisions to make with the user before running (all are **fixed at index creatio
 cyborgdb-migrate --config migration.toml
 ```
 
-Progress goes to stderr; a log lands at `./cyborgdb-migrate.log` (override with `--log-file`). For long migrations, run in the background and monitor the log.
+Progress goes to stderr; a log lands at `./cyborgdb-migrate.log` (override with `--log-file`).
 
-**Immediately after start on a new non-KMS index:** grab the `Generated encryption key (hex): …` line and hand it to the user with a clear "store this now" instruction.
+**Key capture comes before everything else on a new non-KMS index.** The `Generated encryption key (hex): …` line is printed **once, to stderr only** — it never appears in the log file, and `--quiet` suppresses it entirely. So:
+
+- **Never pass `--quiet`** on a run that creates a non-KMS index — the key would be shown nowhere and the migrated data unrecoverable.
+- **Don't background the run until the key is saved.** Capture stderr to a file and wait for the key line before leaving the process alone:
+
+  ```bash
+  cyborgdb-migrate --config migration.toml 2> migrate-stderr.log &
+  until grep -m1 "Generated encryption key (hex):" migrate-stderr.log; do
+    kill -0 $! 2>/dev/null || { echo "migrate exited before printing a key" >&2; break; }
+    sleep 1
+  done
+  ```
+
+  Then save the key to a protected file right away — don't rely on the user having stored it yet:
+
+  ```bash
+  mkdir -p ~/.cyborgdb/keys
+  (umask 077; grep -m1 "Generated encryption key (hex):" migrate-stderr.log | awk '{print $NF}' > ~/.cyborgdb/keys/<index_name>.key)
+  rm migrate-stderr.log   # safe mid-run: the process keeps its open handle
+  ```
+
+  Hand the key to the user and tell them two things: it's saved at `~/.cyborgdb/keys/<index_name>.key` (owner-only permissions, outside any git repo) as a local recovery copy, and they should still store it in a secrets manager — the file dies with this machine. Monitor `./cyborgdb-migrate.log` for the rest of the run. Future runs into the same index can set `create_index = false` and point `key_file` straight at this path.
+- **For long migrations, prefer a key the user already holds:** create the destination index yourself first (SDK `create_index` with a key from their secret manager), then run migrate with `create_index = false` + `key_file` — no key is ever printed and backgrounding is safe from the start. (`key_file` is only read when `create_index = false`.)
+
+Runs with `kms_name` or against an existing index generate no key — background those freely.
 
 ## Step 5 — Handle the outcome
 

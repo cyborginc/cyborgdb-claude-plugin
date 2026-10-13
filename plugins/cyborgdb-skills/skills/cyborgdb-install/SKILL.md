@@ -45,14 +45,20 @@ Either path also needs Python ≥ 3.10 for the client step (the `cyborgdb` SDK r
 
 Follow the fetched quickstart. The shape it lands on (fallback if docs unreachable):
 
-**Docker** — run detached, not interactive, so the flow continues without a human watching a foreground container:
+**Docker** — run detached, not interactive, so the flow continues without a human watching a foreground container. A `cyborgdb` container may already exist from an earlier run (`docker run --name` fails on a rerun), so reuse it instead of erroring out:
 
 ```bash
 docker pull cyborginc/cyborgdb-service:latest
-docker run -d --name cyborgdb -p 8000:8000 \
-  -v cyborgdb_data:/app/cyborgdb_data \
-  cyborginc/cyborgdb-service:latest
+if docker ps -a --format '{{.Names}}' | grep -qx cyborgdb; then
+  docker start cyborgdb   # reuse the existing container (no-op if already running)
+else
+  docker run -d --name cyborgdb -p 8000:8000 \
+    -v cyborgdb_data:/app/cyborgdb_data \
+    cyborginc/cyborgdb-service:latest
+fi
 ```
+
+`docker start` reuses the container's original image — if the user wants the freshly pulled `:latest` instead, recreate it first with `docker rm -f cyborgdb` (data survives in the `cyborgdb_data` volume).
 
 No `CYBORGDB_API_KEY`, no storage env vars — the container starts with zero configuration on the disk backend. (On Linux `--network host` also works; `-p 8000:8000` works everywhere, so prefer it for an automated flow.)
 
@@ -63,15 +69,19 @@ python3 -m venv .cyborgdb-venv && .cyborgdb-venv/bin/pip install cyborgdb-servic
 nohup .cyborgdb-venv/bin/cyborgdb-service > cyborgdb-service.log 2>&1 &
 ```
 
-**Wait for health** — poll rather than sleep-and-hope; don't proceed until this passes:
+**Wait for health** — poll rather than sleep-and-hope, and fail loudly if the service never comes up; don't proceed past a non-zero exit here:
 
 ```bash
+healthy=
 for i in $(seq 1 60); do
-  curl -sf http://localhost:8000/v1/health && break
+  curl -sf http://localhost:8000/v1/health && healthy=1 && break
   sleep 2
 done
+[ -n "$healthy" ] || { echo "ERROR: service not healthy after 120s" >&2; exit 1; }
 # Expect: {"status":"healthy","api_version":"v1","version":"0.18.0"}
 ```
+
+On that failure, surface the service's own error before anything else: `docker logs cyborgdb` (Docker) or `cyborgdb-service.log` (pip).
 
 If port 8000 is taken, remap (`-p 8001:8000` / `PORT=8001`) and carry the new port through the rest of the flow — don't stop to ask.
 
@@ -106,7 +116,11 @@ index = client.create_index(
     metric=dataset.metric,
 )
 
-index.upsert(dataset.items)
+# Batched so no single call has to survive a slow host, and progress is visible.
+BATCH = 10_000
+for i in range(0, len(dataset.items), BATCH):
+    index.upsert(dataset.items[i : i + BATCH])
+    print(f"upserted {min(i + BATCH, len(dataset.items))}/{len(dataset.items)}")
 
 results = index.query(query_vectors=dataset.sample_queries[0], top_k=5, include=["distance"])
 assert len(results) > 0, "first query returned no results"
@@ -119,7 +133,7 @@ filtered = index.query(query_vectors=dataset.sample_queries[0], top_k=5, filters
 print(f"filter demo ({example['name']}): {len(filtered)} results")
 ```
 
-Run it: `python first_query.py`. The full dataset is 75k 128-dim vectors — a ~40MB download on first use (cached after), and the upsert typically completes in well under a minute. If the single upsert call times out on a slow host, retry in batches (e.g. 10k items per `index.upsert(...)` call) rather than shrinking the dataset.
+Run it: `python first_query.py`. The full dataset is 75k 128-dim vectors — a ~40MB download on first use (cached after). The upsert runs in 10k batches so slow hosts just take more batches rather than timing out; if a batch still fails, retry that batch — don't shrink the dataset.
 
 ## Step 4 — Verify before claiming success
 
@@ -145,3 +159,4 @@ The same flow runs unattended in a clean container — it's already non-interact
 - **Port 8000 in use** → `lsof -i :8000`; remap and carry the port through.
 - **`load_sample_dataset` download fails** → check egress; retry with `force_download=True` if a cached copy is corrupt (integrity is SHA-256-verified, so a bad cache is rejected automatically).
 - **Health never passes under Docker** → `docker logs cyborgdb` and surface the actual error; on macOS remember the service is only reachable via the mapped port, not `--network host`.
+- **`create_index` fails with "already exists" on a rerun** → a previous run left the `cyborgdb_quickstart` index behind, and its ephemeral key is gone. Use a fresh index name (e.g. suffix `_2`) — don't try to recover the old index.

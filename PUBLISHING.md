@@ -18,8 +18,10 @@ plugins/
     .claude-plugin/plugin.json          # the plugin manifest (name, version, author)
     skills/
       cyborgdb-core/SKILL.md
-      cyborgdb-service/SKILL.md
+      cyborgdb-install/SKILL.md
+      cyborgdb-migrate/SKILL.md
       cyborgdb-sdks/SKILL.md
+      cyborgdb-service/SKILL.md
 README.md                               # user-facing install + usage
 PUBLISHING.md                           # this file
 ```

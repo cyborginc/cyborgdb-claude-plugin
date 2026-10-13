@@ -136,32 +136,37 @@ Run: `python quickstart.py`
 // quickstart.ts — cyborgdb JS/TS SDK v0.18 quickstart
 import { Client, loadSampleDataset } from "cyborgdb";
 
-const client = new Client({
-  baseUrl: "http://localhost:8000",
-  // apiKey only needed if the service sets CYBORGDB_SERVICE_ROOT_KEY.
-});
+async function main() {
+  const client = new Client({
+    baseUrl: "http://localhost:8000",
+    // apiKey only needed if the service sets CYBORGDB_SERVICE_ROOT_KEY.
+  });
 
-console.log(await client.getHealth());
+  console.log(await client.getHealth());
 
-const dataset = await loadSampleDataset(); // quickstart-75k: 75k items, 128-dim
+  const dataset = await loadSampleDataset(); // quickstart-75k: 75k items, 128-dim
 
-const indexKey = client.generateKey();
+  const indexKey = client.generateKey();
 
-const index = await client.createIndex({
-  indexName: "my_index",
-  indexKey,
-  dimension: dataset.dimension,
-  metric: dataset.metric,
-});
+  const index = await client.createIndex({
+    indexName: "my_index",
+    indexKey,
+    dimension: dataset.dimension,
+    // createIndex's metric is a union type; the dataset carries it as string.
+    metric: dataset.metric as "euclidean" | "squared_euclidean" | "cosine",
+  });
 
-await index.upsert({ items: dataset.items });
+  await index.upsert({ items: dataset.items });
 
-const response = await index.query({
-  queryVectors: dataset.sampleQueries[0],
-  topK: 10,
-  include: ["distance"],
-});
-console.log(response.results);
+  const response = await index.query({
+    queryVectors: dataset.sampleQueries[0],
+    topK: 10,
+    include: ["distance"],
+  });
+  console.log(response.results);
+}
+
+main();
 ```
 
 Run: `tsx quickstart.ts` (or `node quickstart.js` after compiling).
