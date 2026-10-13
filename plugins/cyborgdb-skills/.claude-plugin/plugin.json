@@ -1,7 +1,7 @@
 {
   "name": "cyborgdb-skills",
   "version": "0.11.0",
-  "description": "Skills for installing CyborgDB end-to-end and setting up cyborgdb-core, cyborgdb-service, and the Python/JS/Go SDKs",
+  "description": "Skills for installing CyborgDB end-to-end, setting up cyborgdb-core, cyborgdb-service, and the Python/JS/Go SDKs, and migrating from other vector databases",
   "author": {
     "name": "Cyborg Team",
     "email": "ahelle@cyborg.co"

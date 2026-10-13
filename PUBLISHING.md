@@ -35,11 +35,12 @@ PUBLISHING.md                           # this file
 
 Run these from the repo root.
 
-### 1. Make sure everything is committed and pushed
+### 1. Validate, commit, push
 
 ```bash
-git status                 # working tree should be clean
-git push                   # push any local commits to origin/main
+claude plugin validate . --strict   # official validator: schema, paths, reserved names
+git status                          # working tree should be clean
+git push                            # push any local commits to origin/main
 ```
 
 ### 2. Make the repo public
@@ -82,11 +83,18 @@ Done. Share those two commands with anyone who wants to try it.
 /plugin install cyborgdb-skills@cyborgdb-public
 ```
 
+Or as a single command (Claude Code v2.1.275+), which adds the marketplace and installs in one step:
+
+```
+/plugin install cyborgdb-skills --marketplace cyborginc/cyborgdb-claude-plugin
+```
+
 - `cyborginc/cyborgdb-claude-plugin` — the GitHub repo (owner/name shorthand).
 - `cyborgdb-skills` — the plugin name from `plugin.json`.
 - `cyborgdb-public` — the marketplace name from `marketplace.json`.
 
-Users can update later with `/plugin marketplace update cyborgdb-public`.
+Users can update later with `/plugin marketplace update cyborgdb-public`, or enable
+auto-update for the marketplace (off by default) to pick up new versions in the background.
 
 ---
 
@@ -94,8 +102,10 @@ Users can update later with `/plugin marketplace update cyborgdb-public`.
 
 1. Edit the skill(s) under `plugins/cyborgdb-skills/skills/`.
 2. Bump `version` in `plugins/cyborgdb-skills/.claude-plugin/plugin.json`
-   (semver — e.g. `0.10.6` → `0.10.7`).
-3. Commit and push to `main`.
+   (semver — e.g. `0.10.6` → `0.10.7`). The version bump is what makes
+   `update` and auto-update see a new release — pushing without it won't reach users.
+3. Run `claude plugin validate . --strict`.
+4. Commit and push to `main`.
 
 That's all — because the marketplace is the git repo, pushing to `main` publishes the update.
 Users pick it up via `/plugin marketplace update cyborgdb-public`. No re-submission, no review step.
@@ -107,11 +117,23 @@ Users pick it up via `/plugin marketplace update cyborgdb-public`. No re-submiss
 - **Repo must stay public.** Flipping back to private/internal breaks every user's marketplace.
 - **`marketplace.json` name is the marketplace id** users type after `@` — don't rename
   `cyborgdb-public` casually; it changes the install command for everyone.
-- **Validate JSON before pushing** — a malformed `marketplace.json` or `plugin.json` makes the
-  marketplace fail to load with no obvious error:
+- **Validate before pushing** — a malformed manifest makes the marketplace fail to load
+  with no obvious error. Use the official validator (checks schema, path containment,
+  and reserved names, not just JSON syntax; exit codes work in CI):
   ```bash
-  cat .claude-plugin/marketplace.json | python3 -m json.tool > /dev/null && echo OK
-  cat plugins/cyborgdb-skills/.claude-plugin/plugin.json | python3 -m json.tool > /dev/null && echo OK
+  claude plugin validate . --strict
   ```
+- **Never rename or remove a plugin without a `renames` entry.** Renaming `cyborgdb-skills`
+  (or dropping it from `plugins`) breaks every existing install with "plugin not found" —
+  add `"renames": {"old-name": "new-name"}` to `marketplace.json` so installs migrate.
 - **`source` paths are relative** to the repo root in `marketplace.json`
   (e.g. `./plugins/cyborgdb-skills`).
+
+---
+
+## Reference docs
+
+- Publish guide: https://code.claude.com/docs/en/plugins/publish
+- Marketplace manifest reference: https://code.claude.com/docs/en/plugins/marketplace-reference
+- Plugin manifest reference: https://code.claude.com/docs/en/plugins/manifest-reference
+- CLI reference (`claude plugin …`): https://code.claude.com/docs/en/plugins/cli-reference
