@@ -204,10 +204,13 @@ func main() {
         log.Fatal(err)
     }
 
+    // CreateIndexParams.Dimension is *int32; the dataset stores it as int.
+    dimension := int32(dataset.Dimension)
+
     index, err := client.CreateIndex(ctx, &cyborgdb.CreateIndexParams{
         IndexName: "my_index",
         IndexKey:  indexKey,
-        Dimension: &dataset.Dimension,
+        Dimension: &dimension,
         Metric:    &dataset.Metric,
     })
     if err != nil {

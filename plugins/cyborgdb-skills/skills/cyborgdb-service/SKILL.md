@@ -15,20 +15,17 @@ For a fully automated zero-to-first-query install (sample dataset included), use
 
 Try in order; stop as soon as you have a version.
 
-**Docker (already pulled):**
-
-```bash
-docker image inspect cyborginc/cyborgdb-service:latest \
-  --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' 2>/dev/null
-# Or, if a specific tag is in use:
-docker images cyborginc/cyborgdb-service --format '{{.Tag}}'
-```
-
-**Docker (service already running):** the `/v1/health` response contains `version`:
+**Service already running:** the `/v1/health` response contains `version` — this is authoritative:
 
 ```bash
 curl -s http://localhost:8000/v1/health
 # {"status":"healthy","api_version":"v1","version":"0.18.0"}
+```
+
+**Docker (pulled but not running):** read the image tag — the image carries no version label, so the tag is the only offline signal, and `:latest` tells you nothing (start the container and use the health check instead):
+
+```bash
+docker images cyborginc/cyborgdb-service --format '{{.Tag}}'
 ```
 
 **Python (pip-installed):**
@@ -76,14 +73,14 @@ Default to a specific minor tag if the user gave one (e.g. `:v0.18.0`); otherwis
 
    Linux (host networking):
    ```bash
-   sudo docker run -it --rm --network host \
+   docker run -it --rm --network host \
      -v cyborgdb_data:/app/cyborgdb_data \
      cyborginc/cyborgdb-service:latest
    ```
 
    macOS (Docker Desktop is in a VM — needs port mapping):
    ```bash
-   sudo docker run -it -p 8000:8000 \
+   docker run -it -p 8000:8000 \
      -v cyborgdb_data:/app/cyborgdb_data \
      cyborginc/cyborgdb-service:latest
    ```
@@ -164,5 +161,5 @@ If the user runs the service somewhere you can't curl from, hand them the comman
 
 - HTTPS auto-enables when both `SSL_CERT_PATH` and `SSL_KEY_PATH` exist on disk.
 - Authentication is opt-in: set `CYBORGDB_SERVICE_ROOT_KEY` on the service to require SDK `api_key`s.
-- Production process management: gunicorn for the pip-installed service (`gunicorn cyborgdb_service.main:app --port 8000`), or a systemd unit / container orchestrator for Docker.
+- Production process management: run the pip-installed service under a supervisor (systemd unit, etc.) via its own entrypoint — `cyborgdb-service` (or equivalently `uvicorn cyborgdb_service.app:app --host 0.0.0.0 --port 8000`). The service is single-worker by design — don't front it with a multi-worker process manager. For Docker, use a container orchestrator or restart policy.
 - KMS/BYOK, multi-tenancy, YAML config: `https://docs.cyborg.co/versions/latest/service/guides/advanced/`
