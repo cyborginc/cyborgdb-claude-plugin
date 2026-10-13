@@ -1,15 +1,15 @@
 {
   "name": "cyborgdb-public",
-  "description": "Public marketplace of CyborgDB skills for setting up cyborgdb-core, cyborgdb-service, and the language SDKs",
+  "description": "Public marketplace of CyborgDB skills: automated install, cyborgdb-core, cyborgdb-service, the language SDKs, and migration from other vector databases",
   "owner": {
     "name": "Cyborg Team",
-    "email": "ndupont@cyborg.co"
+    "email": "info@cyborg.co"
   },
   "plugins": [
     {
       "name": "cyborgdb-skills",
       "source": "./plugins/cyborgdb-skills",
-      "description": "Skills for setting up cyborgdb-core, cyborgdb-service, and the Python/JS/Go SDKs"
+      "description": "Skills for installing CyborgDB end-to-end, setting up cyborgdb-core, cyborgdb-service, and the Python/JS/Go SDKs, and migrating from other vector databases"
     }
   ]
 }
