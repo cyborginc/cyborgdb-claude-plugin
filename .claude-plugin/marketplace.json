@@ -3,7 +3,7 @@
   "description": "Public marketplace of CyborgDB skills: automated install, cyborgdb-core, cyborgdb-service, the language SDKs, and migration from other vector databases",
   "owner": {
     "name": "Cyborg Team",
-    "email": "ndupont@cyborg.co"
+    "email": "info@cyborg.co"
   },
   "plugins": [
     {

@@ -4,6 +4,6 @@
   "description": "Skills for installing CyborgDB end-to-end, setting up cyborgdb-core, cyborgdb-service, and the Python/JS/Go SDKs, and migrating from other vector databases",
   "author": {
     "name": "Cyborg Team",
-    "email": "ahelle@cyborg.co"
+    "email": "info@cyborg.co"
   }
 }

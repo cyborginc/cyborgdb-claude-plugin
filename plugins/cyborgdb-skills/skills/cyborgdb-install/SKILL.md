@@ -89,8 +89,11 @@ If port 8000 is taken, remap (`-p 8001:8000` / `PORT=8001`) and carry the new po
 
 Install the client SDK and run one self-contained script. Write it to a file yourself and run it — the user touches nothing.
 
+Always install into the `.cyborgdb-venv` venv — never the system Python, where `pip install` fails with `externally-managed-environment` on Homebrew macOS and newer Debian/Ubuntu (PEP 668). On the pip service path the venv already exists from Step 2; on the Docker path create it here (re-running `venv` on an existing one is harmless):
+
 ```bash
-pip install cyborgdb
+python3 -m venv .cyborgdb-venv
+.cyborgdb-venv/bin/pip install cyborgdb
 ```
 
 ```python
@@ -133,7 +136,7 @@ filtered = index.query(query_vectors=dataset.sample_queries[0], top_k=5, filters
 print(f"filter demo ({example['name']}): {len(filtered)} results")
 ```
 
-Run it: `python first_query.py`. The full dataset is 75k 128-dim vectors — a ~40MB download on first use (cached after). The upsert runs in 10k batches so slow hosts just take more batches rather than timing out; if a batch still fails, retry that batch — don't shrink the dataset.
+Run it: `.cyborgdb-venv/bin/python first_query.py`. The full dataset is 75k 128-dim vectors — a ~40MB download on first use (cached after). The upsert runs in 10k batches so slow hosts just take more batches rather than timing out; if a batch still fails, retry that batch — don't shrink the dataset.
 
 ## Step 4 — Verify before claiming success
 
@@ -150,7 +153,7 @@ Then tell the user, concretely: what's running (image/package + version), where 
 The same flow runs unattended in a clean container — it's already non-interactive. The CI contract:
 
 - Exit non-zero if health never passes within the poll window, if the dataset download fails, or if the first query returns zero results (the `assert` above does this).
-- Clean up when asked to leave no state: `docker rm -f cyborgdb && docker volume rm cyborgdb_data` (Docker) or kill the `cyborgdb-service` process and remove `~/.cyborgdb/data` + the venv (pip path).
+- Clean up when asked to leave no state: `docker rm -f cyborgdb && docker volume rm cyborgdb_data` (Docker) or kill the `cyborgdb-service` process and remove `~/.cyborgdb/data` (pip path). Both paths also leave the `.cyborgdb-venv` directory — remove it too.
 - The sample dataset needs egress to its public S3 bucket; cache it (`~/.cache/cyborgdb`) between runs if the CI image supports it.
 
 ## Troubleshooting

@@ -226,7 +226,7 @@ func main() {
         log.Fatal(err)
     }
 
-    results, err := index.Query(ctx, cyborgdb.QueryParams{
+    resp, err := index.Query(ctx, cyborgdb.QueryParams{
         QueryVector: dataset.SampleQueries[0],
         TopK:        10,
         Include:     []string{"distance"},
@@ -234,7 +234,9 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Println(results)
+    for _, r := range *resp.Results.ArrayOfQueryResultItem {
+        fmt.Printf("%s  %.4f\n", r.Id, r.GetDistance())
+    }
 }
 ```
 
