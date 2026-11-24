@@ -50,8 +50,8 @@ For any non-trivial code change, **fetch the matching quickstart page** and foll
 1. **Install** into the user's existing environment:
    ```bash
    pip install cyborgdb-core
-   # Optional extra for LangChain integration:
-   #   pip install cyborgdb-core[langchain]    # LangChain integration
+   # For the LangChain integration, install the standalone package instead:
+   #   pip install langchain-cyborgdb
    ```
 2. **Scaffold** a self-contained file (e.g. `quickstart.py`) using the snippet below. Use `StorageConfig.disk(...)` for default persistent storage; swap to `.s3("bucket")` for cloud. For tests, point `.disk(...)` at a temp dir — there is no in-memory backend.
 3. **Run it once** to verify the setup works against the user's installed version. See *Verifying it works* below.
@@ -171,5 +171,5 @@ If you can't run it (sandboxed env, remote machine), say so explicitly — don't
 - Filter operators: `$eq`, `$ne`, `$in`, `$nin`, `$gt`, `$gte`, `$lt`, `$lte`, `$and`, `$or`, `$not`, `$exists` (MongoDB-style subset; see the section above for upsert/query shapes).
 - Encryption model: an encrypted index does not auto-hide vectors from the key holder — the user must pass `index_key` on `get`/`query` to retrieve decrypted data, and anyone without the key gets nothing.
 - API key (lifts the 1M-item cap): https://cyborgdb.co — pass as first argument: `cyborgdb.Client(api_key, storage_config=...)`.
-- LangChain integration: `cyborgdb_core.integrations.langchain.CyborgVectorStore` (`pip install cyborgdb-core[langchain]`).
+- LangChain integration: `pip install langchain-cyborgdb`, then `from langchain_cyborgdb import CyborgVectorStore, StorageConfig`. Docs: https://docs.cyborg.co/versions/latest/integrations/langchain/introduction
 - Reference: `https://docs.cyborg.co/versions/latest/embedded/`
